@@ -4,10 +4,10 @@ const { createWriteStream } = require(`fs`);
 const { rm, mkdir, unlink } = require(`fs/promises`);
 const { join } = require(`path`);
 
-const notionAPI = `https://www.notion.so/api/v3`;
+const unofficialNotionAPI = `https://www.notion.so/api/v3`;
 const { NOTION_TOKEN, NOTION_SPACE_ID, NOTION_USER_ID } = process.env;
 const client = axios.create({
-  baseURL: notionAPI,
+  baseURL: unofficialNotionAPI,
   headers: {
     Cookie: `token_v2=${NOTION_TOKEN};`,
     "x-notion-active-user-header": NOTION_USER_ID,
@@ -48,10 +48,12 @@ const exportFromNotion = async (destination, format) => {
   console.log(`Started Export as task [${taskId}].\n`);
 
   let exportURL;
+  let fileTokenCookie;
   while (true) {
     await sleep(2);
     const {
       data: { results: tasks },
+      headers: { 'set-cookie': getTasksRequestCookies },
     } = await client.post(`getTasks`, { taskIds: [taskId] });
     const task = tasks.find((t) => t.id === taskId);
 
@@ -64,6 +66,9 @@ const exportFromNotion = async (destination, format) => {
 
     if (task.state === `success`) {
       exportURL = task.status.exportURL;
+      fileTokenCookie = getTasksRequestCookies.find((cookie) =>
+        cookie.includes("file_token="),
+      );
       console.log(`\nExport finished.`);
       break;
     }
@@ -73,6 +78,9 @@ const exportFromNotion = async (destination, format) => {
     method: `GET`,
     url: exportURL,
     responseType: `stream`,
+    headers: {
+      Cookie: fileTokenCookie,
+    },
   });
 
   const size = response.headers["content-length"];
